@@ -1,32 +1,74 @@
-import React, { useRef, useEffect } from 'react';
-import WaveSurfer from 'wavesurfer.js';
+import React, { useState, useEffect, useRef } from 'react';
+import AudioTrack from './AudioTrack';
 
-const AudioTrack = ({ audioData }) => {
-  const waveSurferRef = useRef(null);
+const AudioRecorder = () => {
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioTracks, setAudioTracks] = useState([]);
+
+  const mediaRecorderRef = useRef(null);
+  const audioStreamRef = useRef(null);
 
   useEffect(() => {
-    const waveSurfer = WaveSurfer.create({
-      container: '#waveform',
-      waveColor: '#bdbdbd',
-      progressColor: '#2196f3',
-      cursorColor: 'navy',
-      height: 150,
-      responsive: true,
-      scrollParent: true,
-    });
+    const savedTracks = localStorage.getItem('audioTracks');
+    if (savedTracks) {
+      setAudioTracks(JSON.parse(savedTracks));
+    }
 
-    waveSurferRef.current = waveSurfer;
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        audioStreamRef.current = stream;
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
 
-    const blob = new Blob(audioData, { type: 'audio/webm' });
-    const url = URL.createObjectURL(blob);
-    waveSurfer.load(url);
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) {
+            const newTrack = {
+              id: Date.now(),
+              data: [event.data],
+            };
+            setAudioTracks(prevTracks => [...prevTracks, newTrack]);
+          }
+        };
+      })
+      .catch(error => {
+        console.error('Error accessing microphone:', error);
+      });
+  }, []);
 
-    return () => {
-      waveSurfer.destroy();
-    };
-  }, [audioData]);
+  useEffect(() => {
+    localStorage.setItem('audioTracks', JSON.stringify(audioTracks));
+  }, [audioTracks]);
 
-  return <div id="waveform" />;
+  const startRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const addNewTrack = () => {
+    setAudioTracks(prevTracks => [...prevTracks, { id: Date.now(), data: [] }]);
+  };
+
+  return (
+    <div>
+      <h2>Audio Recorder</h2>
+      <button onClick={isRecording ? stopRecording : startRecording}>
+        {isRecording ? 'Stop Recording' : 'Start Recording'}
+      </button>
+      <button onClick={addNewTrack}>Add New Track</button>
+      {audioTracks.map(track => (
+        <AudioTrack key={track.id} audioData={track.data} />
+      ))}
+    </div>
+  );
 };
 
-export default AudioTrack;
+export default AudioRecorder;
